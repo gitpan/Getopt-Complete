@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv(0.03);
+our $VERSION = qv('0.4');
 
 use Getopt::Long;
 
@@ -23,6 +23,7 @@ our $LONE_DASH_SUPPORT = 1;
 sub import {    
     my $class = shift;
 
+    # Install an alias to %Getopt::Complete::OPTS in the caller's namespace
     do {
         no strict 'refs';
         my $pkg = caller();
@@ -37,7 +38,7 @@ sub import {
     my $bare_args = 0;
     my $parse_errors;
     for my $key (sort keys %COMPLETION_HANDLERS) {
-        my ($name,$spec) = ($key =~ /^([\w|-]\w*|\<\>|)(\W.*|)/);
+        my ($name,$spec) = ($key =~ /^([\w|-]+|\<\>|)(\W.*|)/);
         if (not defined $name) {
             print STDERR __PACKAGE__ . " is unable to parse '$key' from spec!";
             $parse_errors++;
@@ -80,10 +81,14 @@ sub import {
             $parse_errors++;
         }
     }
+
+    # If here are errors, we exit now.
     if ($parse_errors) {
         exit 1;
     }
 
+    # Check whether we're "really" running, or have been run by the shell
+    # to do word completion.
     if ($ENV{COMP_LINE}) {
         # This command has been set to autocomplete via "completeF".
         my $left = substr($ENV{COMP_LINE},0,$ENV{COMP_POINT});
@@ -100,10 +105,20 @@ sub import {
         # it's hard to spot the case in which the previous word is "boolean", and has no value specified
         if ($previous) {
             my ($name) = ($previous =~ /^-+(.*)/);
-            if ($OPT_SPEC{$name} =~ /[\!\+]/) {
+            if ($OPT_SPEC{$name} and $OPT_SPEC{$name} =~ /[\!\+]/) {
                 push @other_options, $previous;
                 $previous = undef;
             }
+            elsif ($name =~ /no-(.*)/) {
+                # Handle a case of an option which natively starts with "--no-"
+                # and is set to boolean.  There is one of everything in this world. 
+                $name =~ s/^no-//;
+                if ($OPT_SPEC{$name} and $OPT_SPEC{$name} =~ /[\!\+]/) {
+                    push @other_options, $previous;
+                    $previous = undef;
+                }
+            }
+            
         }
         @ARGV = @other_options;
         local $SIG{__WARN__} = sub { push @Getopt::Complete::ERRORS, @_ };
@@ -151,25 +166,38 @@ sub import {
     }
 }
 
-sub print_matches_and_exit {
-    my $class = shift;
-}
-
 sub resolve_possible_completions {
     my ($self,$command, $current, $previous, $all) = @_;
 
     $previous = '' if not defined $previous;
 
-    my @args = keys %COMPLETION_HANDLERS;
     my @possibilities;
 
     my ($dashes,$resolve_values_for_option_name) = ($previous =~ /^(--)(.*)/); 
-   
     if (not length $previous) {
         # an unqalified argument, or an option name
         if ($current =~ /^(-+)/) {
             # the incomplete word is an option name
-            @possibilities = map { length($_) ? ('--' . $_) : ('-') } grep { $_ ne '<>' } @args;
+            my @args = keys %COMPLETION_HANDLERS;
+            
+            # We only show the negative version of boolean options 
+            # when the user already has "--no-" on the line.
+            # Otherwise, we just include --no- as a possible (partial) completion
+            my %boolean = map { $_ => 1 } grep { $OPT_SPEC{$_} =~ /\!/ } @args;
+            my $show_negative_booleans = ($current =~ /^--no-/ ? 1 : 0);
+            @possibilities = 
+                map { length($_) ? ('--' . $_) : ('-') } 
+                map {
+                    ($show_negative_booleans and $boolean{$_} and not substr($_,0,3) eq 'no-')
+                        ? ($_, 'no-' . $_)
+                        : $_
+                }
+                grep { $_ ne '<>' } @args;
+            if (%boolean and not $show_negative_booleans) {
+                # a partial completion for negating booleans when we're NOT
+                # already showing the complete list
+                push @possibilities, "--no-\t";
+            }
         }
         else {
             # bare argument
@@ -196,22 +224,38 @@ sub resolve_possible_completions {
         }
     }
 
+    my $uncompletable_valid_possibilities = pop @possibilities if ref($possibilities[-1]);
+
+    # Determine which possibilities will actually match the current word
+    # The shell does this for us, but we need to do it to predict a few things
+    # and to adjust what we show the shell.
+    # This loop also determines which options should complete with a space afterward,
+    # and which options can be abbreviated when showing a list for the user.
     my @matches; 
     my @nospace;
+    my @abbreviated_matches;
     for my $p (@possibilities) {
         my $i =index($p,$current);
         if ($i == 0) {
-            my $last_char = substr($p,length($p)-1,1);
-            if ($last_char eq "\t") {
-                #print STDERR ">> nospace on $p\n";
-                ##print STDERR Data::Dumper->new([$p])->Useqq(1)->Dump;
-                push @matches, substr($p,0,length($p)-1);
-                $nospace[$#matches] = 1;
+            my $m;
+            if (substr($p,length($p)-1,1) eq "\t") {
+                # a partial match: no space at the end so the user can "drill down"
+                $m = substr($p,0,length($p)-1);
+                $nospace[$#matches+1] = 1;
             }
             else {
-                #print STDERR ">> space on $p\n";
-                push @matches, $p;
-                $nospace[$#matches] = 0;
+                $m = $p;
+                $nospace[$#matches+1] = 0;
+            }
+            if (substr($m,0,1) eq "\t") {
+                # abbreviatable...
+                my ($prefix,$abbreviation) = ($m =~ /^\t(.*)\t(.*)$/);
+                push @matches, $prefix . $abbreviation;
+                push @abbreviated_matches, $abbreviation;
+            }
+            else {
+                push @matches, $m;
+                push @abbreviated_matches, $m;
             }
         }
     }
@@ -222,13 +266,12 @@ sub resolve_possible_completions {
         if ($nospace[0]) {
             # We don't want a space, and there is no way to tell bash that, so we trick it.
             if ($matches[0] eq $current) {
-                # it IS done completing the word: return nothing so it doesn't stride forward with a space
-                # it will think it has a bad completion, effectively
+                # It IS done completing the word: return nothing so it doesn't stride forward with a space
+                # It will think it has a bad completion, effectively.
                 @matches = ();
             }
             else {
-                # it IS done completing the word: return nothing so it doesn't stride forward with a space
-                # it is NOT done completing the word
+                # It is NOT done completing the word.
                 # We return 2 items which start with the real value, but have an arbitrary ending.
                 # It will show everything but that ending, and then stop.
                 push @matches, $matches[0];
@@ -241,26 +284,49 @@ sub resolve_possible_completions {
         }
     }
     else {
-        # There are multiple matches.
-        # If all of them have a prefix in common, it will complete that much.
+        # There are multiple matches to the text already typed.
+        # If all of them have a prefix in common, the shell will complete that much.
         # If not, it will show a list.
-        # We may not want to show the complete text of each word, but a shortened version.
+        # We may not want to show the complete text of each word, but a shortened version,
         my $first_mismatch = eval {
             my $pos;
             no warnings;
             for ($pos=0; $pos < length($matches[0]); $pos++) {
                 my $expected = substr($matches[0],$pos,1);
                 for my $match (@matches[1..$#matches]) {  
-                    if (substr($match,$pos,0) ne $expected) {
+                    if (substr($match,$pos,1) ne $expected) {
                         return $pos;            
                     }
                 }
             }
             return $pos;
         };
-        if ($first_mismatch == 0) {
-            # no partial completion will occur, the shell will show a list now
-            # TODO: HERE IS WHERE WE ABBREVIATE THE MATCHES FOR DISPLAY
+        
+
+        my $current_length = length($current);
+        if ($first_mismatch == $current_length) {
+            # No partial completion will occur: the shell will show a list now.
+            # Attempt abbreviation of the displayed options:
+
+            my @matches = @abbreviated_matches;
+
+            #my $cut = $current;
+            #$cut =~ s/[^\/]+$//;
+            #my $cut_length = length($cut);
+            #my @matches =
+            #    map { substr($_,$cut_length) } 
+            #    @matches;
+
+            # If there are > 1 abbreviated items starting with the same character
+            # the shell won't realize they're abbreviated, and will do completion
+            # instead of listing options.  We force some variation into the list
+            # to prevent this.
+            my $first_c = substr($matches[0],0,1);
+            my @distinct_firstchar = grep { substr($_,0,1) ne $first_c } @matches[1,$#matches];
+            unless (@distinct_firstchar) {
+                # this puts an ugly space at the beginning of the completion set :(
+                push @matches,' '; 
+            }
         }
         else {
             # some partial completion will occur, continue passing the list so it can do that
@@ -281,7 +347,7 @@ sub invalid_options {
             $spec = '=s@';
         }
         else {
-            ($dashes,$name,$spec) = ($key =~ /^(\-*?)([\w|-]\w*|\<\>|)(\W.*|)/);
+            ($dashes,$name,$spec) = ($key =~ /^(\-*?)([\w|-]+|\<\>|)(\W.*|)/);
             #($dashes,$name,$spec) = ($key =~ /^(\-*)(\w+)(.*)/);
             if (not defined $name) {
                 print STDERR "key $key is unparsable in " . __PACKAGE__ . " spec inside of $0 !!!";
@@ -312,7 +378,8 @@ sub invalid_options {
                 push @valid_values, @{ pop(@valid_values) };
             }
             unless (grep { $_ eq $value } map { /(.*)\t$/ ? $1 : $_ } @valid_values) {
-                my $msg = (($key || 'arguments') . " has invalid value $value.  Select from: " . join(", ", @valid_values) . "\n");
+                my $label = ($key eq '<>' ? "invalid argument $value." : "$key has invalid value $value."); 
+                my $msg = ($label  . ".  Select from: " . join(", ", map { /^(.+)\t$/ ? $1 : $_ } @valid_values) . "\n");
                 push @failed, $msg;
             }
         }
@@ -320,49 +387,15 @@ sub invalid_options {
     return @failed;
 }
 
-# Support the shell-builtiin completions.
-# Under development.  Replicating what the shell does w/ files and directories completely
-# seems impossible.  You must use -o default on the complete command to get zero-match options to complete.
-
-sub files {
-    my ($command,$value,$key,$opts) = @_;
-    $value ||= '';
-    my @f =  grep { $_ !~/^\s+$/ } `bash -c "compgen -f '$value'"`; 
-    chomp @f;
-    if (@f == 1 and -d $f[0]) {
-        $f[0] .= "/\t"; 
-    }
-    if (-d $value) {
-        push @f, [$value];
-        push @{$f[-1]},'-' if $LONE_DASH_SUPPORT;
-    }
-    else {
-        push @f, ['-'] if $LONE_DASH_SUPPORT;
-    }
-    return \@f;
-}
-
-sub directories {
-    my ($command,$value,$key,$opts) = @_;
-    $value ||= '';
-    my @f =  grep { $_ !~/^\s+$/ } `bash -c "compgen -d '$value'"`; 
-    chomp @f;
-    if (@f == 1 and -d $f[0]) {
-        $f[0] .= "/\t"; 
-    }
-    if (-d $value) {
-        push @f, [$value];
-    }
-    return \@f;
-}
-
-no warnings;
-*f = \&files;
-*d = \&directories;
-use warnings;
+# Support the shell-builtin completions.
+# Some hackery seems to be required to replicate regular file completion.
+# Case 1: you want to selectively not put a space after some options (incomplete directories)
+# Case 2: you want to show only part of the completion value (the last dir in a long path)
 
 # Manufacture the long and short sub-names on the fly.
 for my $subname (qw/
+    files
+    directories
     commands
     users
     groups
@@ -374,9 +407,21 @@ for my $subname (qw/
     my $option = substr($subname,0,1);
     my $code = sub {
         my ($command,$value,$key,$opts) = @_;
-        #[ map { chomp } grep { $_ !~/^\s+$/ } `bash -c "compgen -$option '$value'"` ], 
-        my @f =  grep { $_ !~/^\s+$/ } `bash -c "compgen -$option '$value'"`;
+        $value ||= '';
+        $value =~ s/\\/\\\\/;
+        $value =~ s/\'/\\'/;
+        my @f =  grep { $_ !~/^\s+$/ } `bash -c "compgen -$option -- '$value'"`; 
         chomp @f;
+        if ($option eq 'f' or $option eq 'd') {
+            @f = map { -d $_ ? "$_/\t" : $_ } @f;
+            if (-d $value) {
+                push @f, [$value];
+                push @{$f[-1]},'-' if $LONE_DASH_SUPPORT and $option eq 'f';
+            }
+            else {
+                push @f, ['-'] if $LONE_DASH_SUPPORT and $option eq 'f';
+            }
+        }
         return \@f;
     };
     no strict 'refs';
@@ -487,6 +532,10 @@ END {
 
 Getopt::Complete - custom programmable shell completion for Perl apps
 
+=head1 VERSION
+
+This document describes Getopt::Complete v0.4.
+
 =head1 SYNOPSIS
 
 In the Perl program "myprogram":
@@ -534,9 +583,6 @@ The completion features currently work with the bash shell, which is
 the default on most Linux and Mac systems.  Patches for other shells 
 are welcome.  
 
-For more information go to:
- 
- http://github.com/sakoht/Getopt--Complete-for-Perl/
 
 =head1 OPTIONS PROCESSING
 
@@ -957,10 +1003,13 @@ Getopt::Complete wraps Getopt::Long to do the underlying option parsing.  It use
 GetOptions(\%h, @specification) to produce the %OPTS hash.  Customization of
 Getopt::Long should occur in a BEGIN block before using Getopt::Complete.  
 
- 
 =head1 DEVELOPMENT
 
-  git clone git://github.com/sakoht/Getopt--Complete-for-Perl.git
+Patches are welcome.
+ 
+ http://github.com/sakoht/Getopt--Complete-for-Perl/
+
+ git clone git://github.com/sakoht/Getopt--Complete-for-Perl.git
 
 =head1 BUGS
 
@@ -978,9 +1027,23 @@ is incomplete.
 
 L<Getopt::Long> is the definitive options parser, wrapped by this module.
 
-=head1 AUTHOR
+=head1 COPYRIGHT
 
-Scott Smith (sakoht at cpan)
+Copyright 2009 Scott Smith and Washington University School of Medicine
+
+=head1 LICENSE
+
+=head1 AUTHORS
+
+Scott Smith (sakoht at cpan .org)
+
+=head1 LICENSE
+
+This program is free software; you can redistribute it and/or modify it under
+the same terms as Perl itself.
+
+The full text of the license can be found in the LICENSE file included with this
+module.
 
 =cut
 

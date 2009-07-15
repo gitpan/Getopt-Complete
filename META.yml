@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Getopt-Complete
-version:            v0.03
+version:            v0.4
 abstract:           custom programmable shell completion for Perl apps
 author:
     - Scott Smith <sakoht@cpan.org>
