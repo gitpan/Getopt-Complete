@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.6');
+our $VERSION = qv('0.7');
 
 use IPC::Open2;
 use Data::Dumper;
@@ -37,6 +37,7 @@ sub option_specs {
     my $self = shift;
     my @specs;
     for my $key (keys %{ $self->{option_specs} }) {
+        next if $key eq '<>';
         my $value = $self->{option_specs}{$key};
         push @specs, $key . $value;
     }
@@ -48,6 +49,12 @@ sub option_spec {
     my $name = shift;
     Carp::confess("Bad params") if not defined $name;
     return $self->{option_specs}{$name};
+}
+
+sub has_option {
+    my $self = shift;
+    my $name = shift;
+    return exists $self->{completion_handlers}{$name};
 }
 
 sub completion_handler {
@@ -234,7 +241,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.6.
+This document describes Getopt::Complete v0.7.
 
 =head1 SYNOPSIS
 
