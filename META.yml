@@ -1,20 +1,29 @@
---- #YAML:1.0
-name:               Getopt-Complete
-version:            v0.4
-abstract:           custom programmable shell completion for Perl apps
+---
+abstract: 'custom programmable shell completion for Perl apps'
 author:
-    - Scott Smith <sakoht@cpan.org>
-license:            unknown
-distribution_type:  module
+  - 'Scott Smith and Washington University School of Medicine'
+build_requires:
+  App::Prove: 0
+  Test::More: 0.86
 configure_requires:
-    ExtUtils::MakeMaker:  0
-requires:
-    Test::More:  0
-no_index:
-    directory:
-        - t
-        - inc
-generated_by:       ExtUtils::MakeMaker version 6.48
+  ExtUtils::MakeMaker: 6.48
+distribution_type: module
+generated_by: 'Module::Install version 0.81'
+license: perl
 meta-spec:
-    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
-    version:  1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Getopt-Complete
+no_index:
+  directory:
+    - inc
+    - t
+requires:
+  Carp: 0
+  Getopt::Long: 0
+  IPC::Open2: 0
+  Scalar::Util: 0
+  version: 0
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.005000
