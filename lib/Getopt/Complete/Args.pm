@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.5');
+our $VERSION = qv('0.6');
 
 use Getopt::Long;
 use Scalar::Util;
@@ -47,14 +47,25 @@ sub new {
     else {
         die "Expected Getopt::Complete::Options, or a constructor ARRAY/HASH for ''options''.  Got reference $options.";
     }
-
     
     $self->_init();
 
     return $self;
 }
 
-for my $method (qw/option_names option_specs option_spec completion_handler/) {
+sub options {
+    shift->{options};
+}
+
+sub argv {
+    @{ shift->{argv} };
+}
+
+sub errors {
+    @{ shift->{errors} }
+}
+
+for my $method (qw/sub_commands option_names option_specs option_spec completion_handler/) {
     no strict 'refs';
     *{$method} = sub {
         my $self = shift;
@@ -63,30 +74,46 @@ for my $method (qw/option_names option_specs option_spec completion_handler/) {
     }
 }
 
-sub argv {
-    @{ shift->{argv} };
+sub has_value {
+    my $self = shift;
+    my $name = shift;
+    return exists $self->{'values'}{$name};
 }
 
-sub options {
-    shift->{options};
-}
-
-sub option_value {
+sub value {
     my $self = shift;
     my $name = shift;
     my $value = $self->{'values'}{$name};
     return $value;
 }
 
-sub errors {
-    @{ shift->{errors} }
+sub bare_args {
+    my $self = shift;
+    my $name = shift;
+    my $value = $self->{'values'}{'<>'};
+    return $value;
+}
+
+sub parent_sub_commands {
+    my $self = shift;
+    my $name = shift;
+    my $value = $self->{'values'}{'>'};
+    return $value;
 }
 
 sub _init {
     my $self = shift; 
     
+    # as long as the first word is a valid sub-command, drill down to the subordinate options list,
+    # and also shift the args into a special buffer
+    # (if you have sub-commands AND bare arguments, and the arg is a valid sub-command ...don't do that
     local @ARGV = @{ $self->{argv} };
-    
+    my @sub_command_path;
+    while (@ARGV and my $delegate = $self->options->completion_handler('>' . $ARGV[0])) {
+        push @sub_command_path, shift @ARGV;
+        $self->{options} = $delegate;
+    }
+
     my %values;
     my @errors;
 
@@ -108,6 +135,10 @@ sub _init {
                 push @errors, "unexpected unnamed arguments: $arg";
             }
         }
+    }
+
+    if (@sub_command_path) {
+        $values{'>'} = \@sub_command_path;
     }
 
     %{ $self->{'values'} } = %values;
@@ -143,7 +174,7 @@ sub _validate_values {
             }
         }
 
-        my $value_returned = $self->option_value($name);
+        my $value_returned = $self->value($name);
         my @values = (ref($value_returned) ? @$value_returned : $value_returned);
         
         my $all_valid_values;
@@ -188,15 +219,28 @@ sub resolve_possible_completions {
 
     my ($dashes,$resolve_values_for_option_name) = ($previous =~ /^(--)(.*)/); 
     if (not length $previous) {
-        # an unqalified argument, or an option name
-        if ($current =~ /^(-+)/) {
+        # no specific option is before this: a sub-command, a bare argument, or an option name
+        if ($current =~ /^(-+)/
+            or (
+                $current eq ''
+                and not $self->sub_commands
+                and not $self->option_spec('<>')
+            )
+        ) {
             # the incomplete word is an option name
             my @args = $self->option_names;
             
             # We only show the negative version of boolean options 
             # when the user already has "--no-" on the line.
             # Otherwise, we just include --no- as a possible (partial) completion
-            my %boolean = map { $_ => 1 } grep { $self->option_spec($_) =~ /\!/ } grep { $_ ne '<>' }  @args;
+            no warnings; #########
+            my %boolean = 
+                map { $_ => 1 } 
+                grep { not $self->has_value($_) }
+                grep { $self->option_spec($_) =~ /\!/ } 
+                grep { $_ ne '<>' and substr($_,0,1) ne '>' }  
+                @args;
+
             my $show_negative_booleans = ($current =~ /^--no-/ ? 1 : 0);
             @possibilities = 
                 map { length($_) ? ('--' . $_) : ('-') } 
@@ -206,9 +250,10 @@ sub resolve_possible_completions {
                         : $_
                 }
                 grep {
-                    not (defined $self->option_value($_) and not $self->option_spec($_) =~ /@/)
+                    not (defined $self->value($_) and not $self->option_spec($_) =~ /@/)
                 }
-                grep { $_ ne '<>' } @args;
+                grep { $_ ne '<>' and substr($_,0,1) ne '>' } 
+                @args;
             if (%boolean and not $show_negative_booleans) {
                 # a partial completion for negating booleans when we're NOT
                 # already showing the complete list
@@ -216,7 +261,7 @@ sub resolve_possible_completions {
             }
         }
         else {
-            # bare argument
+            # bare argument or sub-command
             $resolve_values_for_option_name = '<>';
         }
     }
@@ -237,6 +282,14 @@ sub resolve_possible_completions {
             # no possibilities
             # print STDERR "recvd: " . join(',',@_) . "\n";
             @possibilities = ();
+        }
+
+        if ($resolve_values_for_option_name eq '<>') {
+            push @possibilities, $self->sub_commands;
+            if (grep { $_ ne '<>' and substr($_,0,1) ne '>' } $self->option_names) {
+                # do a partial completion on dashes if there are any non-bare (option) arguments
+                push @possibilities, "--\t"
+            }
         }
     }
 
@@ -357,6 +410,17 @@ sub resolve_possible_completions {
     return @matches;
 }
 
+sub __install_as_default__ {
+    my $self = shift;
+    
+
+    # Then make it and its underlying hash available globally.
+    
+    *Getopt::Complete::ARGS = $self;
+    *Getopt::Complete::ARGS = \%{ $self->{values} };
+
+}
+
 1;
 
 =pod 
@@ -367,7 +431,7 @@ Getopt::Complete::Args - a set of option/value pairs
 
 =head1 VERSION
 
-This document describes Getopt::Complete::Args v0.5.
+This document describes Getopt::Complete::Args v0.6.
 
 =head1 SYNOPSIS
 
@@ -402,7 +466,7 @@ look like this:
 
  for my $name ($args->option_names) {
     my $spec = $args->option_spec($name);
-    my $value = $args->option_value($name);
+    my $value = $args->value($name);
     print "option $name has specification $spec and value $value\n";
  }
 
@@ -426,17 +490,38 @@ Returns the list of original command-line arguments.
 
 Returns the L<Getopt::Complete::Options> object which was used to parse the command-line.
 
-=item option_value($name)
+=item value($option_name)
 
 Returns the value for a given option name after parsing.
+
+=item bare_args
+
+Returns the bare arguments.  The same as ->value('<>')
+
+=item parent_sub_commands
+
+When using a tree of sub-commands, gives the list of sub-commands selected, in order to
+get to this point.   The options and option/value pairs apply to just this particular sub-command.
+
+The same as ->value('>').
+
+Distinct from ->sub_commands(), which returns the list of next possible choices when
+drilling down.
 
 =item option_spec($name)
 
 Returns the GetOptions specification for the parameter in question.
 
-=item opion_handler($name)
+=item completion_handler($name)
 
 Returns the arrayref or code ref which handles resolving valid completions.
+
+=items sub_commands
+
+The list of sub-commands which are options at this level of a command tree.
+
+This is distinct from sub_command_path, which are the sub-commands which were chosen
+to get to this level in the tree.
 
 =back
 
