@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.7');
+our $VERSION = qv('0.8');
 
 use Getopt::Complete::Options;
 use Getopt::Complete::Args;
@@ -22,11 +22,7 @@ sub import {
         # re-using this module after options processing, with no arguments,
         # will just re-export (alias, actually) %ARGS and $ARGS.
         if ($ARGS) {
-            print STDERR ">> just exporting\n";
             $class->export_aliases();
-        }
-        else {
-            print STERR ">> just using\n";
         }
         return;
     }
@@ -56,8 +52,6 @@ sub import {
         argv => [@ARGV]
     );
    
-    print Data::Dumper::Dumper($args);
-
     # Then make it and its underlying hash available globally in this namespace
     $args->__install_as_default__();
 
@@ -102,7 +96,7 @@ Getopt::Complete - programmable shell completion for Perl apps
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.7.
+This document describes Getopt::Complete v0.8.
 
 =head1 SYNOPSIS
 
@@ -501,8 +495,6 @@ The list of builtin types supported as-of this writing are:
     aliases
     builtins
 
-See "man bash", in the Programmable Complete secion, and the "compgen" builtin command for more details.
-
 To indicate that an argument's valid values are one of the above, use the exact string
 after Getopt::Complete:: as the completion callback.  For example:
 
@@ -525,6 +517,9 @@ The following are all equivalent.  They effectively produce the same list as 'co
    file1 => 'files'
    file1 => 'f'
 
+See L<Getopt::Complete::Compgen> for specifics on using builtin completions.
+
+See "man bash", in the Programmable Complete secion, and the "compgen" builtin command for more details.
 
 =head1 UNLISTED VALID VALUES
 

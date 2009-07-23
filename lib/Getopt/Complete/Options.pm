@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.7');
+our $VERSION = qv('0.8');
 
 use IPC::Open2;
 use Data::Dumper;
@@ -183,7 +183,6 @@ sub parse_completion_request {
         # the first word matches a sub-command for this command
         # delegate to the options object for that sub-command, which
         # may happen recursively
-        print STDERR ">> delegating to $left[0]\n";
         return $delegate->parse_completion_request(@_);
     }
 
@@ -241,7 +240,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.7.
+This document describes Getopt::Complete v0.8.
 
 =head1 SYNOPSIS
 
