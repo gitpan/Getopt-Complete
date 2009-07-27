@@ -1,4 +1,6 @@
 Changes
+doc/getopt-complete.odp
+doc/getopt-complete.pdf
 inc/Module/Install.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Can.pm
@@ -9,13 +11,12 @@ inc/Module/Install/Win32.pm
 inc/Module/Install/WriteAll.pm
 INSTALL
 lib/Getopt/Complete.pm
-lib/Getopt/Complete/.Args.pm.swp
 lib/Getopt/Complete/Args.pm
 lib/Getopt/Complete/Compgen.pm
 lib/Getopt/Complete/Options.pm
 LICENSE
 Makefile.PL
-MANIFEST
+MANIFEST			This list of files
 META.yml
 README
 t/00-load.t
@@ -23,6 +24,5 @@ t/01-try-many.in
 t/boilerplate.t
 t/exercise.t
 t/myprogram
-t/myprogram2
 t/mytreeapp
 t/pod.t

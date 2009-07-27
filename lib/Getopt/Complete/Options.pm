@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.8');
+our $VERSION = qv('0.9');
 
 use IPC::Open2;
 use Data::Dumper;
@@ -74,7 +74,7 @@ sub _init {
     while (my $key = shift @_) {
         my $handler = shift @_;
         
-        my ($name,$spec) = ($key =~ /^([\w|-|\>]\w+|\<\>|)(\W.*|)/);
+        my ($name,$spec) = ($key =~ /^([\w|-|\>][\w|-]+|\<\>|)(\W.*|)/);
         if (not defined $name) {
             push @parse_errors,  __PACKAGE__ . " is unable to parse '$key' from spec!";
             next;
@@ -152,7 +152,8 @@ sub handle_shell_completion {
         }
         my $args = Getopt::Complete::Args->new(options => $self, argv => $other);
         my @matches = $args->resolve_possible_completions($command,$current,$previous);
-        print join("\n",@matches),"\n";
+        my @printable_matches = $args->translate_completions_for_shell_display($current, @matches);
+        print join("\n",@printable_matches),"\n";
         exit;
     }
     return 1;
@@ -193,20 +194,19 @@ sub parse_completion_request {
         # parse error
         return;
     }
-
+ 
     my $command = shift @left;
     my $current;
+    $left =~ s/\\ / /g;
     if (@left and $left[-1] eq substr($left,-1*length($left[-1]))) {
         # we're at the end of the final word in the @left list, and are trying to complete it
         $current = pop @left;
     }
     else {
-        # we're starting to complete an empty word
         $current = '';
     }
-    my $previous = ( (@left and $left[-1] =~ /^--/) ? (pop @left) : ()) ;
+    my $previous = ( (@left and $left[-1] =~ /^--/ and not $left[-1] =~ /^--[\w\-]+\=/) ? (pop @left) : ()) ;
     my @other_options = (@left,@right);
-
 
     # it's hard to spot the case in which the previous word is "boolean", and has no value specified
     if ($previous) {
@@ -228,7 +228,16 @@ sub parse_completion_request {
         }
         
     }
-    return ($command,$current,$previous,\@other_options);
+
+    my $quote;
+    if ($current =~ /^([\'\"])/) {
+        $quote = $1;
+        $current = substr($current,1);
+        if (substr($current,-1,1) eq $quote and not substr($current,-2,1) eq '\\') {
+           $current = substr($current,0,length($current)-1); 
+        };
+    }
+    return ($command,$current,$previous,\@other_options, $quote);
 }
 
 
@@ -240,7 +249,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.8.
+This document describes Getopt::Complete v0.9.
 
 =head1 SYNOPSIS
 

@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.8');
+our $VERSION = qv('0.9');
 
 use Getopt::Long;
 use Scalar::Util;
@@ -167,7 +167,6 @@ sub _validate_values {
         }
         else {
             ($dashes,$name,$spec) = ($key =~ /^(\-*?)([\w|-]+|\<\>|)(\W.*|)/);
-            #($dashes,$name,$spec) = ($key =~ /^(\-*)(\w+)(.*)/);
             if (not defined $name) {
                 print STDERR "key $key is unparsable in " . __PACKAGE__ . " spec inside of $0 !!!";
                 next;
@@ -181,13 +180,14 @@ sub _validate_values {
         for my $value (@values) {
             next if not defined $value;
             next if not defined $completions;
+            my @valid_values_shown_in_message;
             if (ref($completions) eq 'CODE') {
                 # we pass in the value as the "completeme" word, so that the callback
                 # can be as optimal as possible in determining if that value is acceptable.
-                $completions = $completions->(undef,$value,$key,$self);
+                $completions = $completions->(undef,$value,$key,$self->{'values'});
                 if (not defined $completions or not ref($completions) eq 'ARRAY' or @$completions == 0) {
                     # if not, we give it the chance to give us the full list of options
-                    $completions = $self->completion_handler($key)->(undef,undef,$key,{});
+                    $completions = $self->completion_handler($key)->(undef,undef,$key,$self->{'values'});
                 }
             }
             unless (ref($completions) eq 'ARRAY') {
@@ -195,12 +195,17 @@ sub _validate_values {
                 next;
             }
             my @valid_values = @$completions;
+            @valid_values_shown_in_message = @valid_values;
+            
             if (ref($valid_values[-1]) eq 'ARRAY') {
                 push @valid_values, @{ pop(@valid_values) };
+                pop @valid_values_shown_in_message;
             }
             unless (grep { $_ eq $value } map { /(.*)\t$/ ? $1 : $_ } @valid_values) {
-                my $label = ($key eq '<>' ? "invalid argument $value." : "$key has invalid value $value."); 
-                my $msg = ($label  . ".  Select from: " . join(", ", map { /^(.+)\t$/ ? $1 : $_ } @valid_values) . "\n");
+                my $msg = ($key eq '<>' ? "invalid argument $value." : "$key has invalid value $value."); 
+                if (@valid_values_shown_in_message) {
+                    $msg .= "  Select from: " . join(", ", map { /^(.+)\t$/ ? $1 : $_ } @valid_values_shown_in_message);
+                }
                 push @failed, $msg;
             }
         }
@@ -218,6 +223,7 @@ sub resolve_possible_completions {
     my @possibilities;
 
     my ($dashes,$resolve_values_for_option_name) = ($previous =~ /^(--)(.*)/); 
+    my $is_option_name = 0;
     if (not length $previous) {
         # no specific option is before this: a sub-command, a bare argument, or an option name
         if ($current =~ /^(-+)/
@@ -228,6 +234,8 @@ sub resolve_possible_completions {
             )
         ) {
             # the incomplete word is an option name
+            $is_option_name = 1;
+
             my @args = $self->option_names;
             
             # We only show the negative version of boolean options 
@@ -245,6 +253,9 @@ sub resolve_possible_completions {
             @possibilities = 
                 map { length($_) ? ('--' . $_) : ('-') } 
                 map {
+                    ($self->option_spec($_) =~ /\=/ ? "$_=\t" : $_ )
+                }
+                map {
                     ($show_negative_booleans and $boolean{$_} and not substr($_,0,3) eq 'no-')
                         ? ($_, 'no-' . $_)
                         : $_
@@ -259,13 +270,25 @@ sub resolve_possible_completions {
                 # already showing the complete list
                 push @possibilities, "--no-\t";
             }
+            if ($current =~ /--(.+?)=(.*)/) {
+                # using the --key=value syntax..
+                my ($option,$value) = ($1,$2);
+                @possibilities = $self->reduce_possibilities_for_current_word('--' . $option, @possibilities);
+                if (@possibilities == 1 and length($current) >= $possibilities[0]) {
+                    # the key portion is complete
+                    # continue below as though were were doing a regular value completion
+                    $resolve_values_for_option_name = $option;
+                    $current = ($value eq "\t" ? '' : $value);
+                    @possibilities = ();
+                }
+            }
         }
         else {
             # bare argument or sub-command
             $resolve_values_for_option_name = '<>';
         }
     }
-
+    
     if ($resolve_values_for_option_name) {
         # either a value for a named option, or a bare argument.
         if (my $handler = $self->completion_handler($resolve_values_for_option_name)) {
@@ -293,8 +316,15 @@ sub resolve_possible_completions {
         }
     }
 
-    my $uncompletable_valid_possibilities = pop @possibilities if ref($possibilities[-1]);
+    my @matches = $self->reduce_possibilities_for_current_word($current,@possibilities);
+    return @matches;
+}
 
+sub reduce_possibilities_for_current_word {
+    my ($self, $current, @possibilities) = @_;
+    
+    my $uncompletable_valid_possibilities = pop @possibilities if ref($possibilities[-1]);
+    
     # Determine which possibilities will actually match the current word
     # The shell does this for us, but we need to do it to predict a few things
     # and to adjust what we show the shell.
@@ -306,47 +336,66 @@ sub resolve_possible_completions {
     for my $p (@possibilities) {
         my $i =index($p,$current);
         if ($i == 0) {
-            my $m;
-            if (substr($p,length($p)-1,1) eq "\t") {
-                # a partial match: no space at the end so the user can "drill down"
-                $m = substr($p,0,length($p)-1);
-                $nospace[$#matches+1] = 1;
-            }
-            else {
-                $m = $p;
-                $nospace[$#matches+1] = 0;
-            }
-            if (substr($m,0,1) eq "\t") {
-                # abbreviatable...
-                # (nothing does this currently, and the code below which uses it does not work yet)
-                my ($prefix,$abbreviation) = ($m =~ /^\t(.*)\t(.*)$/);
-                push @matches, $prefix . $abbreviation;
-                push @abbreviated_matches, $abbreviation;
-            }
-            else {
-                push @matches, $m;
-                push @abbreviated_matches, $m;
-            }
+            push @matches, $p;
+        }
+    }
+    return @matches;
+}
+
+sub translate_completions_for_shell_display {
+    my ($self, $current, @matches) = @_;
+
+    my $uncompletable_valid_matches = pop @matches if ref($matches[-1]);
+    
+    # Determine which matches will actually match the current word
+    # The shell does this for us, but we need to do it to predict a few things
+    # and to adjust what we show the shell.
+    # This loop also determines which options should complete with a space afterward,
+    # and which options can be abbreviated when showing a list for the user.
+    my @printable; 
+    my @nospace;
+    my @abbreviated_printable;
+    for my $p (@matches) {
+        my $m;
+        if (substr($p,length($p)-1,1) eq "\t") {
+            # a partial match: no space at the end so the user can "drill down"
+            $m = substr($p,0,length($p)-1);
+            $nospace[$#printable+1] = 1;
+        }
+        else {
+            $m = $p;
+            $nospace[$#printable+1] = 0;
+        }
+        if (substr($m,0,1) eq "\t") {
+            # abbreviatable...
+            # (nothing does this currently, and the code below which uses it does not work yet)
+            my ($prefix,$abbreviation) = ($m =~ /^\t(.*)\t(.*)$/);
+            push @printable, $prefix . $abbreviation;
+            push @abbreviated_printable, $abbreviation;
+        }
+        else {
+            push @printable, $m;
+            push @abbreviated_printable, $m;
         }
     }
 
-    if (@matches == 1) {
+    if (@printable == 1) {
         # there is one match
         # the shell will complete it if it is not already complete, and put a space at the end
         if ($nospace[0]) {
             # We don't want a space, and there is no way to tell bash that, so we trick it.
-            if ($matches[0] eq $current) {
+            if ($printable[0] eq $current) {
                 # It IS done completing the word: return nothing so it doesn't stride forward with a space
                 # It will think it has a bad completion, effectively.
-                @matches = ();
+                @printable = ();
             }
             else {
                 # It is NOT done completing the word.
                 # We return 2 items which start with the real value, but have an arbitrary ending.
                 # It will show everything but that ending, and then stop.
-                push @matches, $matches[0];
-                $matches[0] .= 'A';
-                $matches[1] .= 'B';
+                push @printable, $printable[0];
+                $printable[0] .= 'A';
+                $printable[1] .= 'B';
             }
         }
         else {
@@ -354,16 +403,16 @@ sub resolve_possible_completions {
         }
     }
     else {
-        # There are multiple matches to the text already typed.
+        # There are multiple printable to the text already typed.
         # If all of them have a prefix in common, the shell will complete that much.
         # If not, it will show a list.
         # We may not want to show the complete text of each word, but a shortened version,
         my $first_mismatch = eval {
             my $pos;
             no warnings;
-            for ($pos=0; $pos < length($matches[0]); $pos++) {
-                my $expected = substr($matches[0],$pos,1);
-                for my $match (@matches[1..$#matches]) {  
+            for ($pos=0; $pos < length($printable[0]); $pos++) {
+                my $expected = substr($printable[0],$pos,1);
+                for my $match (@printable[1..$#printable]) {  
                     if (substr($match,$pos,1) ne $expected) {
                         return $pos;            
                     }
@@ -377,28 +426,28 @@ sub resolve_possible_completions {
         # Enable to get file/directory completions to be short, like is default in the shell. 
         if (0) {
             my $current_length = length($current);
-            if (@matches and ($first_mismatch == $current_length)) {
+            if (@printable and ($first_mismatch == $current_length)) {
                 # No partial completion will occur: the shell will show a list now.
                 # Attempt abbreviation of the displayed options:
 
-                my @matches = @abbreviated_matches;
+                my @printable = @abbreviated_printable;
 
                 #my $cut = $current;
                 #$cut =~ s/[^\/]+$//;
                 #my $cut_length = length($cut);
-                #my @matches =
+                #my @printable =
                 #    map { substr($_,$cut_length) } 
-                #    @matches;
+                #    @printable;
 
                 # If there are > 1 abbreviated items starting with the same character
                 # the shell won't realize they're abbreviated, and will do completion
                 # instead of listing options.  We force some variation into the list
                 # to prevent this.
-                my $first_c = substr($matches[0],0,1);
-                my @distinct_firstchar = grep { substr($_,0,1) ne $first_c } @matches[1,$#matches];
+                my $first_c = substr($printable[0],0,1);
+                my @distinct_firstchar = grep { substr($_,0,1) ne $first_c } @printable[1,$#printable];
                 unless (@distinct_firstchar) {
                     # this puts an ugly space at the beginning of the completion set :(
-                    push @matches,' '; 
+                    push @printable,' '; 
                 }
             }
             else {
@@ -407,7 +456,11 @@ sub resolve_possible_completions {
         }
     }
 
-    return @matches;
+    for (@printable) {
+        s/ /\\ /g;
+    }
+
+    return @printable;
 }
 
 sub __install_as_default__ {
@@ -426,7 +479,7 @@ Getopt::Complete::Args - a set of option/value pairs
 
 =head1 VERSION
 
-This document describes Getopt::Complete::Args v0.8.
+This document describes Getopt::Complete::Args v0.9.
 
 =head1 SYNOPSIS
 
@@ -511,7 +564,7 @@ Returns the GetOptions specification for the parameter in question.
 
 Returns the arrayref or code ref which handles resolving valid completions.
 
-=items sub_commands
+=item sub_commands
 
 The list of sub-commands which are options at this level of a command tree.
 
