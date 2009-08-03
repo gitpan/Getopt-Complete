@@ -1,7 +1,7 @@
 ---
 abstract: 'programmable shell completion for Perl apps'
 author:
-  - 'Scott Smith and Washington University School of Medicine'
+  - 'Scott Smith (sakoht at cpan .org)'
 build_requires:
   App::Prove: 0
   Test::More: 0.86
@@ -26,4 +26,4 @@ requires:
   version: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.009000
+version: 0.010000
