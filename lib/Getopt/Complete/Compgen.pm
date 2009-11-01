@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.10');
+our $VERSION = qv('0.11');
 
 # Support the shell-builtin completions.
 # Some hackery seems to be required to replicate regular file completion.
@@ -56,7 +56,7 @@ Getopt::Complete::Compgen - standard tab-completion callbacks
 
 =head1 VERSION
 
-This document describes Getopt::Complete::Compgen v0.10.
+This document describes Getopt::Complete::Compgen v0.11.
 
 =head1 SYNOPSIS
 
@@ -116,7 +116,7 @@ The manual page for bash details the bash built-in command "compgen", which this
 
 =head1 COPYRIGHT
 
-Copyright 20.10 Scott Smith and Washington University School of Medicine
+Copyright 2010 Scott Smith and Washington University School of Medicine
 
 =head1 AUTHORS
 
