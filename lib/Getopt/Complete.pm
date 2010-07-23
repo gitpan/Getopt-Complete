@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.11');
+our $VERSION = qv('0.13');
 
 use Getopt::Complete::Options;
 use Getopt::Complete::Args;
@@ -96,7 +96,7 @@ Getopt::Complete - programmable shell completion for Perl apps
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.11.
+This document describes Getopt::Complete v0.13.
 
 =head1 SYNOPSIS
 
@@ -548,8 +548,6 @@ ERRORS array described above.
     
 =head1 PARTIAL COMPLETIONS
 
-=over 4
-
 =head2 BASICS
 
 Any returned value ending in a <TAB> character ("\t") will be considered
@@ -591,8 +589,6 @@ and internal hackery is used to force the shell to not put a space
 where it isn't needed.  This is not part of the bash programmable completion
 specification, but is used to simulate features typically only available
 with bash for builtin completions like files/directories.
-
-=back
 
 =head1 SUB-COMMAND TREES
 
@@ -709,8 +705,6 @@ To disable this, set $Getopt::Complete::LONE_DASH = 0.
 Getopt::Complete makes a lot of assumptions in order to be easy to use in the
 default case.  Here is how to override that behavior if it's not what you want.
 
-=over 4
-
 =head2 OPTION 1: DOING CUSTOM ERROR HANDLING
 
 To prevent Getopt::Complete from exiting at compile time if there are errors,
@@ -782,8 +776,6 @@ to get completions at compile time.
         # if you also want %ARGS and $ARGS here when you're finished...
         Getopt:Complete->export_aliases(__PACKAGE__);
     };
-
-=back
 
 =head1 EXTENSIVE USAGE EXAMPLE
 
@@ -916,6 +908,7 @@ Copyright 2010 Scott Smith and Washington University School of Medicine
 =head1 AUTHORS
 
 Scott Smith (sakoht at cpan .org)
+Nathan Nutter
 
 =head1 LICENSE
 
