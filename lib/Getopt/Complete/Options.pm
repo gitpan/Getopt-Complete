@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.13');
+our $VERSION = qv('0.14');
 
 use IPC::Open2;
 use Data::Dumper;
@@ -158,8 +158,12 @@ sub handle_shell_completion {
             exit;
         }
         my $args = Getopt::Complete::Args->new(options => $self, argv => $other);
-        my @matches = $args->resolve_possible_completions($command,$current,$previous);
-        my @printable_matches = $args->translate_completions_for_shell_display($current, @matches);
+        my @matches;
+        my @printable_matches;
+        unless ($args->errors) {
+            @matches = $args->resolve_possible_completions($command,$current,$previous);
+            @printable_matches = $args->translate_completions_for_shell_display($current, @matches);
+        }
         print join("\n",@printable_matches),"\n";
         exit;
     }
@@ -256,7 +260,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.13.
+This document describes Getopt::Complete v0.14.
 
 =head1 SYNOPSIS
 
