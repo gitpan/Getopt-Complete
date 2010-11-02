@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.14');
+our $VERSION = qv('0.16');
 
 # Support the shell-builtin completions.
 # Some hackery seems to be required to replicate regular file completion.
@@ -32,7 +32,16 @@ for my $subname (qw/
         my @f =  grep { $_ !~/^\s+$/ } `bash -c "compgen -$option -- '$value'"`; 
         chomp @f;
         if ($option eq 'f' or $option eq 'd') {
-            @f = map { -d $_ ? "$_/\t" : $_ } @f;
+            # bash is fine with ~/ paths but perl is not, need to translate
+            my $home_dir = (getpwuid($<))[7];
+            for (my $i = 0; $i < @f; $i++) {
+                my $perl_path = $f[$i];
+                $perl_path =~ s/^~/$home_dir/;
+                if ( -d $perl_path ) {
+                    $f[$i] .= "/\t";
+                }
+            }
+
             my @not_shown = ($value);
             push @f, \@not_shown;
             push @not_shown, '-' if $Getopt::Complete::LONE_DASH_SUPPORT and $option eq 'f';
@@ -56,7 +65,7 @@ Getopt::Complete::Compgen - standard tab-completion callbacks
 
 =head1 VERSION
 
-This document describes Getopt::Complete::Compgen v0.14.
+This document describes Getopt::Complete::Compgen v0.16.
 
 =head1 SYNOPSIS
 

@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.14');
+our $VERSION = qv('0.16');
 
 use IPC::Open2;
 use Data::Dumper;
@@ -181,7 +181,14 @@ sub _line_to_argv {
     my $result = join("",<$reader>);
     no strict; no warnings;
     my $array = eval $result;
-    return @$array;
+    my @array = @$array;
+
+    # We don't want to expand ~ for user experience and to be consistent with
+    # Bash's behavior for tab completion (as opposed to expansion of ARGV).
+    my $home_dir = (getpwuid($<))[7];
+    @array = map { $_ =~ s/^$home_dir/\~/; $_ } @array;
+
+    return @array;
 }
 
 sub parse_completion_request {
@@ -191,6 +198,7 @@ sub parse_completion_request {
     my $left = substr($comp_line,0,$comp_point);
     my @left = _line_to_argv($left);
 
+    # TODO: does this ever fire?
     if (@left and my $delegate = $self->completion_handler('>' . $left[0])) {
         # the first word matches a sub-command for this command
         # delegate to the options object for that sub-command, which
@@ -208,15 +216,16 @@ sub parse_completion_request {
  
     my $command = shift @left;
     my $current;
-    $left =~ s/\\ / /g;
-    if (@left and $left[-1] eq substr($left,-1*length($left[-1]))) {
+    if (substr($left, -1) ne ' ' || substr($left, -2) eq '\ ') {
         # we're at the end of the final word in the @left list, and are trying to complete it
         $current = pop @left;
     }
     else {
         $current = '';
     }
+    $left =~ s/\\ / /g;
     my $previous = ( (@left and $left[-1] =~ /^--/ and not $left[-1] =~ /^--[\w\-]+\=/) ? (pop @left) : ()) ;
+    # TODO: this might be a good spot to make sure we don't complete a new sub-command
     my @other_options = (@left,@right);
 
     # it's hard to spot the case in which the previous word is "boolean", and has no value specified
@@ -260,7 +269,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete v0.14.
+This document describes Getopt::Complete v0.16.
 
 =head1 SYNOPSIS
 
