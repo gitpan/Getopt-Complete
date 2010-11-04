@@ -1,5 +1,7 @@
-
 package Getopt::Complete::LazyOptions;
+
+use version;
+our $VERSION = qv('0.17');
 
 our $AUTOLOAD;
 
@@ -64,6 +66,10 @@ sub AUTOLOAD {
 =head1 NAME
 
 Getopt::Complete::LazyOptions - internal object used as a placeholder for unprocessed options
+
+=head1 VERSION
+
+This document describes Getopt::Complete::LazyOptions 0.17.
 
 =head1 SYNOPSIS
 
