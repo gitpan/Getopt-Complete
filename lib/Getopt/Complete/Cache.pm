@@ -1,7 +1,6 @@
 package Getopt::Complete::Cache;
 
-use version;
-our $VERSION = qv('0.17');
+our $VERSION = '0.18';
 
 use strict;
 use warnings;
@@ -67,14 +66,14 @@ sub import {
     
     $cache_path = $file if ($file);
     
-    if ($cache_path and -e $cache_path) {
+    if ( -f $cache_path && -s $cache_path) {
         my $fh;
         open($fh, $cache_path);
         if ($fh) {
             my $src = join('', <$fh>);
             require Getopt::Complete;
             my $spec = eval $src;
-            if ($spec) {
+            if (@$spec) {
                 Getopt::Complete->import(@$spec);
             }
         }
@@ -202,7 +201,7 @@ Getopt::Complete::Cache - cache options next-to the command they apply-to
 
 =head1 VERSION
 
-This document describes Getopt::Complete::Cache 0.17.
+This document describes Getopt::Complete::Cache 0.18.
 
 =head1 SYNOPSIS
 
