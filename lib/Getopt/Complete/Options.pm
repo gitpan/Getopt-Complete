@@ -259,6 +259,7 @@ sub parse_completion_request {
     return ($command,$current,$previous,\@other_options, $quote);
 }
 
+1;
 
 =pod 
 
@@ -268,7 +269,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete 0.18.
+This document describes Getopt::Complete 0.20
 
 =head1 SYNOPSIS
 
