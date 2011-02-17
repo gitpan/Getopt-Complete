@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 use version;
-our $VERSION = qv('0.20');
+our $VERSION = qv('0.22');
 
 use Getopt::Complete::Options;
 use Getopt::Complete::Args;
@@ -96,7 +96,7 @@ Getopt::Complete - programmable shell completion for Perl apps
 
 =head1 VERSION
 
-This document describes Getopt::Complete 0.20.
+This document describes Getopt::Complete 0.22.
 
 =head1 SYNOPSIS
 
@@ -903,12 +903,13 @@ the manual page for bash has lots of info on how tab-completion works
 
 =head1 COPYRIGHT
 
-Copyright 2010 Scott Smith and Washington University School of Medicine
+Copyright 2010, 2011 Washington University School of Medicine
 
 =head1 AUTHORS
 
 Scott Smith (sakoht at cpan .org)
 Nathan Nutter
+Andrei Benea
 
 =head1 LICENSE
 
