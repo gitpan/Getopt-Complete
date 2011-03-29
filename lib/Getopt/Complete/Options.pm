@@ -74,7 +74,7 @@ sub _init {
     while (my $key = shift @_) {
         my $handler = shift @_;
         
-        my ($name,$spec) = ($key =~ /^([\w|-|\>][\w|-]+|\<\>|)(\W.*|)/);
+        my ($name,$spec) = ($key =~ /^([\w|-|\>][\w|-]*|\<\>|)(\W.*|)/);
         if (not defined $name) {
             push @parse_errors,  __PACKAGE__ . " is unable to parse '$key' from spec!";
             next;
@@ -126,7 +126,7 @@ sub _init {
         }
         if ($name eq '-') {
             if ($spec and $spec ne '!') {
-                push @parse_errors,  __PACKAGE__ . " $key errors: $name is implicitly boolean!";
+                push @parse_errors,  __PACKAGE__ . " $key errors: $name is implicitly stand-alone!";
             }
             $spec ||= '!';
         }
@@ -269,7 +269,7 @@ Getopt::Complete::Options - a command-line options specification
 
 =head1 VERSION
 
-This document describes Getopt::Complete 0.24
+This document describes Getopt::Complete 0.25
 
 =head1 SYNOPSIS
 
