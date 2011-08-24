@@ -20,14 +20,16 @@ ok(test_completion("$path model --help foo ") == 0, 'no results for invalid argu
 ok(test_completion("$path model --help foo") == 0, 'no results for non-argument option');
 ok(test_completion("$path project list --filter name=foo") == 0, 'no results for option argument');
 ok(test_completion("$path project list --fooba") == 0, 'no results for unknown option');
-ok(test_completion("$path project list --fooba ~/") > 0, 'file completion for unknown option');
-ok(test_completion("$path project list ~/") > 0, 'file completion for bare args');
+ok(test_completion("$path project list --fooba $FindBin::Bin") > 0, 'file completion for unknown option');
+ok(test_completion("$path project list $FindBin::Bin") > 0, 'file completion for bare args');
 
 sub test_completion {
-    my $COMP_LINE = shift;
-    my $COMP_POINT = length($COMP_LINE);
-    my $command = (split(' ', $COMP_LINE))[0];
-    my @results = split("\n", `COMP_LINE='$COMP_LINE' COMP_POINT=$COMP_POINT $command`);
-    print "Found " . scalar(@results) . " results for '$COMP_LINE': " . join(', ', @results) . ".\n";
+    my $line = shift;
+    my @args = split(' ', $line);
+    my $COMP_CWORD = $#args;
+    if($line =~ m/\s$/) { $COMP_CWORD++; } #actually want to complete a new word
+    my $command = $args[0];
+    my @results = split("\n", `COMP_CWORD=$COMP_CWORD $command $line`);
+    print "Found " . scalar(@results) . " fresults for '$line': " . join(', ', @results) . "\n";
     return scalar(@results);
 }

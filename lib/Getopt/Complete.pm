@@ -3,7 +3,7 @@ package Getopt::Complete;
 use strict;
 use warnings;
 
-our $VERSION = '0.25';
+our $VERSION = '0.26';
 
 use Getopt::Complete::Options;
 use Getopt::Complete::Args;
@@ -95,7 +95,7 @@ Getopt::Complete - programmable shell completion for Perl apps
 
 =head1 VERSION
 
-This document describes Getopt::Complete 0.25.
+This document describes Getopt::Complete 0.26.
 
 =head1 SYNOPSIS
 
@@ -118,7 +118,10 @@ In the Perl program "myprogram":
 
 In ~/.bashrc or ~/.bash_profile, or directly in bash:
 
-  complete -C myprogram myprogram
+  function _getopt_complete () {
+    COMPREPLY=($( COMP_CWORD=$COMP_CWORD perl `which ${COMP_WORDS[0]}` ${COMP_WORDS[@]:0} ));
+  }
+  complete -F _getopt_complete myprogram
 
 Thereafter in the terminal (after next login, or sourcing the updated .bashrc):
 
@@ -243,11 +246,10 @@ values from the %ARGS hash instead.
 
 Put the following in your .bashrc or .bash_profile:
 
-  complete -C myprogram myprogram
-
-For the very conservative, do this (to ensure nothing runs during completion checks):
- 
-  complete -C 'perl -c myprogram 2>/dev/null' myprogram
+  function _getopt_complete () {
+    COMPREPLY=($( COMP_CWORD=$COMP_CWORD perl `which ${COMP_WORDS[0]}` ${COMP_WORDS[@]:0} ));
+  }
+  complete -F _getopt_complete myprogram
 
 =item 3
 
@@ -779,7 +781,14 @@ to get completions at compile time.
 =head1 EXTENSIVE USAGE EXAMPLE
 
 Cut-and-paste this into a script called "myprogram" in your path, make it executable, 
-and then run this in the shell: complete -C myprogram myprogram.  Then try it out.
+and then run this in the shell:
+
+  function _getopt_complete () {
+    COMPREPLY=($( COMP_CWORD=$COMP_CWORD perl `which ${COMP_WORDS[0]}` ${COMP_WORDS[@]:0} ));
+  }
+  complete -F _getopt_complete myprogram
+
+Then try it out.
 It does one of everything, besides command trees.
 
     #!/usr/bin/env perl
